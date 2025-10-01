@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ระบบค้นหาออเดอร์นักศึกษา (Excel/CSV)</title>
+  <style>
+    body{box-sizing:border-box;font-family:'Sarabun','Noto Sans Thai',-apple-system,BlinkMacSystemFont,sans-serif;margin:0;padding:0;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh}
+    .container{max-width:1000px;margin:0 auto;padding:2rem}
+    .header{text-align:center;color:#fff;margin-bottom:3rem}
+    .header h1{font-size:2.2rem;font-weight:700;margin-bottom:.5rem}
+    .header p{opacity:.9}
+    .search-card,.results-card{background:#fff;border-radius:16px;padding:2rem;box-shadow:0 10px 30px rgba(0,0,0,.1)}
+    .search-card{margin-bottom:1.25rem}
+    .search-form{display:flex;flex-direction:column;gap:1rem}
+    .input-group{display:flex;flex-direction:column;gap:.5rem}
+    .input-label{font-weight:600;color:#374151}
+    .search-input{padding:1rem;border:2px solid #e2e8f0;border-radius:12px;font-size:1.05rem;background:#f8fafc;transition:.25s}
+    .search-input:focus{outline:none;border-color:#667eea;background:#fff;box-shadow:0 0 0 3px rgba(102,126,234,.1)}
+    .search-btn,.file-btn{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border:none;padding:.9rem 1.25rem;border-radius:12px;font-weight:600;cursor:pointer;transition:.2s}
+    .file-row{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
+    .file-name{font-size:.95rem;color:#374151;background:#f1f5f9;border-radius:10px;padding:.5rem .75rem}
+    .search-btn:hover,.file-btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(102,126,234,.30)}
+    .results-card{display:none}
+    .student-header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:1.25rem;border-radius:12px;margin-bottom:1.25rem;text-align:center}
+    .student-name{font-size:1.35rem;font-weight:700;margin-bottom:.25rem}
+    .student-id{opacity:.95}
+    .orders-table{width:100%;border-collapse:collapse;margin-top:.5rem;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,.08)}
+    .orders-table th{background:#f8fafc;padding:.85rem;text-align:left;font-weight:700;color:#374151;border-bottom:2px solid #e2e8f0}
+    .orders-table td{padding:.85rem;border-bottom:1px solid #e2e8f0;color:#475569}
+    .orders-table tr:hover{background:#f8faff}
+    .order-number{background:#667eea;color:#fff;padding:.15rem .6rem;border-radius:999px;font-size:.85rem;font-weight:700}
+    .quantity-badge{background:#10b981;color:#fff;padding:.2rem .65rem;border-radius:999px;font-size:.9rem;font-weight:700}
+    .summary-stats{display:flex;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap}
+    .stat-card{background:#f8fafc;padding:1rem;border-radius:12px;text-align:center;flex:1;min-width:160px;border-left:4px solid #667eea}
+    .stat-number{font-size:1.4rem;font-weight:800;color:#667eea;margin-bottom:.25rem}
+    .stat-label{color:#64748b;font-size:.9rem}
+    .no-results{text-align:center;padding:2rem;color:#64748b}
+    .no-results-icon{font-size:3rem;margin-bottom:.5rem}
+    .error-message{background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:1rem;border-radius:8px;margin-top:.75rem;display:none}
+    .hint{font-size:.9rem;color:#475569}
+    @media (max-width:768px){
+      .container{padding:1rem}
+      .orders-table{font-size:.92rem}
+      .orders-table th,.orders-table td{padding:.75rem .5rem}
+      .summary-stats{flex-direction:column}
+    }
+  </style>
+  <!-- SheetJS for Excel/CSV parsing (client-side) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🛍️ ระบบค้นหาออเดอร์นักศึกษา</h1>
+      <p>อัปโหลดไฟล์ Excel/CSV แล้วค้นหาด้วย “รหัสนักศึกษา” หรือ “ชื่อ-สกุล”</p>
+    </div>
+
+    <div class="search-card">
+      <!-- File loader row -->
+      <div class="file-row">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+        <button class="file-btn" id="loadBtn" type="button">โหลดฐานข้อมูลจาก Excel/CSV</button>
+        <span class="file-name" id="fileName">ยังไม่ได้เลือกไฟล์</span>
+      </div>
+      <div class="hint">คอลัมน์ที่รองรับ: order / ลำดับ, studentId / รหัส(นักศึกษา), name / ชื่อ(-สกุล), merchandise / สินค้า, quantity / จำนวน</div>
+
+      <form class="search-form" id="searchForm" autocomplete="off">
+        <div class="input-group">
+          <label class="input-label" for="searchInput">รหัสประจำตัวนักศึกษาหรือชื่อ-สกุล</label>
+          <input type="text" id="searchInput" class="search-input" placeholder="เช่น 65010001 หรือ สมชาย ใจดี" required>
+        </div>
+        <button type="submit" class="search-btn">ค้นหาออเดอร์</button>
+      </form>
+      <div id="errorMessage" class="error-message"></div>
+    </div>
+
+    <div class="results-card" id="resultsCard">
+      <div id="studentInfo"></div>
+      <div id="ordersSummary"></div>
+      <div id="ordersTable"></div>
+
+      <div id="noResults" class="no-results" style="display:none;">
+        <div class="no-results-icon">🔍</div>
+        <h3>ไม่พบข้อมูลนักศึกษา</h3>
+        <p>กรุณาตรวจสอบรหัสประจำตัวนักศึกษาหรือชื่อ-สกุลแล้วลองใหม่อีกครั้ง</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // === In-memory database (populated from Excel/CSV) ===
+    let orderDatabase = []; // {order, studentId, name, merchandise, quantity}
+
+    // Elements
+    const fileInput     = document.getElementById('fileInput');
+    const loadBtn       = document.getElementById('loadBtn');
+    const fileNameEl    = document.getElementById('fileName');
+    const searchForm    = document.getElementById('searchForm');
+    const searchInput   = document.getElementById('searchInput');
+    const resultsCard   = document.getElementById('resultsCard');
+    const studentInfo   = document.getElementById('studentInfo');
+    const ordersSummary = document.getElementById('ordersSummary');
+    const ordersTable   = document.getElementById('ordersTable');
+    const noResults     = document.getElementById('noResults');
+    const errorMessage  = document.getElementById('errorMessage');
+
+    // File chosen label
+    fileInput.addEventListener('change', () => {
+      fileNameEl.textContent = fileInput.files?.[0]?.name || 'ยังไม่ได้เลือกไฟล์';
+    });
+
+    // Load Excel/CSV
+    loadBtn.addEventListener('click', async () => {
+      if (!fileInput.files || fileInput.files.length === 0) {
+        showError('กรุณาเลือกไฟล์ Excel/CSV ก่อน');
+        return;
+      }
+      hideError();
+      try {
+        const file = fileInput.files[0];
+        const data = await file.arrayBuffer();
+
+        const wb = XLSX.read(data, { type: 'array' });
+        // Use first sheet
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        // Convert to JSON objects. header:1 returns rows, but we want objects (header row -> keys).
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        // Normalize headers and rows
+        orderDatabase = normalizeRows(rows);
+
+        if (orderDatabase.length === 0) {
+          showError('โหลดไฟล์สำเร็จ แต่ไม่พบข้อมูลที่แม็ปได้ (ตรวจชื่อคอลัมน์)');
+          return;
+        }
+
+        // Show a small success hint
+        showError(`โหลดข้อมูลสำเร็จ: ${orderDatabase.length} แถว`, /*isError=*/false);
+        resultsCard.style.display = 'none';
+      } catch (e) {
+        console.error(e);
+        showError('ไม่สามารถอ่านไฟล์ได้: โปรดตรวจว่าเป็น .xlsx/.xls/.csv และมีหัวตารางแถวแรก');
+      }
+    });
+
+    // Map column names (case-insensitive, Thai/English)
+    function normalizeRows(rows) {
+      // Candidate header sets for each field (lowercased, trimmed)
+      const candidates = {
+        order:       ['order','ลำดับ','no','เลขที่','orderno','เลขออเดอร์'],
+        studentId:   ['studentid','student id','รหัส','รหัสนักศึกษา','รหัสประจำตัว','รหัสประจำตัวนักศึกษา','sid','id'],
+        name:        ['name','ชื่อ','ชื่อ-สกุล','ชื่อสกุล','ชื่อนามสกุล','fullname','full name'],
+        merchandise: ['merchandise','สินค้า','ออเดอร์สินค้า','รายการ','product','item'],
+        quantity:    ['quantity','จำนวน','qty','จำนวนสั่งซื้อ']
+      };
+
+      // Build a header map from the first row's keys
+      const headerKeys = Object.keys(rows[0] || {});
+      const keyMap = {}; // logicalField -> actualHeader
+
+      // helper: normalize a header label
+      const norm = s => String(s || '').trim().toLowerCase();
+
+      // Find matches
+      for (const logicalField of Object.keys(candidates)) {
+        for (const header of headerKeys) {
+          const h = norm(header);
+          if (candidates[logicalField].includes(h)) {
+            keyMap[logicalField] = header;
+            break;
+          }
+        }
+      }
+
+      // If some fields missing, try fuzzy contains
+      for (const logicalField of Object.keys(candidates)) {
+        if (!keyMap[logicalField]) {
+          const possible = headerKeys.find(h => {
+            const hh = norm(h);
+            return candidates[logicalField].some(c => hh.includes(c));
+          });
+          if (possible) keyMap[logicalField] = possible;
+        }
+      }
+
+      // Warn in console which fields were mapped
+      console.table(keyMap);
+
+      // Build normalized array
+      const out = [];
+      for (const r of rows) {
+        const o = {
+          order:       toOrder(r[keyMap.order]),
+          studentId:   toStudentId(r[keyMap.studentId]),
+          name:        String(r[keyMap.name] ?? '').trim(),
+          merchandise: String(r[keyMap.merchandise] ?? '').trim(),
+          quantity:    toQuantity(r[keyMap.quantity])
+        };
+        // Filter out empty rows (require studentId and name at least)
+        if (o.studentId || o.name) out.push(o);
+      }
+      return out;
+    }
+
+    function toOrder(v){
+      // allow text/number; keep as integer if possible
+      const n = Number(v);
+      return Number.isFinite(n) && n>0 ? n : String(v || '').trim();
+    }
+    function toStudentId(v){
+      // Keep leading zeros by converting to string
+      return String(v ?? '').trim();
+    }
+    function toQuantity(v){
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    // === Search ===
+    searchForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      performSearch();
+    });
+
+    function performSearch(){
+      const term = searchInput.value.trim();
+      if (!term){
+        showError('กรุณากรอกรหัสประจำตัวนักศึกษาหรือชื่อ-สกุล');
+        return;
+      }
+      hideError();
+
+      if (orderDatabase.length === 0){
+        showError('ยังไม่ได้โหลดฐานข้อมูลจาก Excel/CSV');
+        return;
+      }
+
+      const results = findStudentOrders(term);
+      if (results.length > 0){
+        displayStudentOrders(results);
+      } else {
+        showNoResults();
+      }
+    }
+
+    function findStudentOrders(searchTerm){
+      const t = searchTerm.toLowerCase();
+      return orderDatabase.filter(o =>
+        String(o.studentId).toLowerCase().includes(t) ||
+        String(o.name).toLowerCase().includes(t)
+      );
+    }
+
+    // === Render ===
+    function displayStudentOrders(orders){
+      const first = orders[0];
+
+      studentInfo.innerHTML = `
+        <div class="student-header">
+          <div class="student-name">${escapeHtml(first.name || '-')}</div>
+          <div class="student-id">รหัสประจำตัว: ${escapeHtml(first.studentId || '-')}</div>
+        </div>
+      `;
+
+      const totalOrders   = orders.length;
+      const totalQuantity = orders.reduce((s,o)=> s + (Number(o.quantity)||0), 0);
+      const uniqueItems   = new Set(orders.map(o=>String(o.merchandise||''))).size;
+
+      ordersSummary.innerHTML = `
+        <div class="summary-stats">
+          <div class="stat-card">
+            <div class="stat-number">${totalOrders}</div>
+            <div class="stat-label">จำนวนออเดอร์ทั้งหมด</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">${totalQuantity}</div>
+            <div class="stat-label">จำนวนสินค้าทั้งหมด</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">${uniqueItems}</div>
+            <div class="stat-label">ประเภทสินค้า</div>
+          </div>
+        </div>
+      `;
+
+      ordersTable.innerHTML = `
+        <table class="orders-table">
+          <thead>
+            <tr>
+              <th>ลำดับ</th>
+              <th>รหัสประจำตัวนักศึกษา</th>
+              <th>ชื่อ - สกุล</th>
+              <th>ออเดอร์สินค้า</th>
+              <th>จำนวน</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${orders.map(o => `
+              <tr>
+                <td><span class="order-number">${escapeHtml(o.order)}</span></td>
+                <td>${escapeHtml(o.studentId)}</td>
+                <td>${escapeHtml(o.name)}</td>
+                <td>${escapeHtml(o.merchandise)}</td>
+                <td><span class="quantity-badge">${escapeHtml(o.quantity)}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+
+      resultsCard.style.display = 'block';
+      noResults.style.display = 'none';
+    }
+
+    function showNoResults(){
+      resultsCard.style.display = 'block';
+      studentInfo.innerHTML = '';
+      ordersSummary.innerHTML = '';
+      ordersTable.innerHTML = '';
+      noResults.style.display = 'block';
+    }
+
+    function showError(message, isError = true){
+      errorMessage.textContent = message;
+      errorMessage.style.display = 'block';
+      errorMessage.style.background = isError ? '#fef2f2' : '#ecfeff';
+      errorMessage.style.borderColor = isError ? '#fecaca' : '#a5f3fc';
+      errorMessage.style.color = isError ? '#dc2626' : '#0369a1';
+    }
+    function hideError(){ errorMessage.style.display = 'none'; }
+
+    function escapeHtml(x){
+      return String(x ?? '').replace(/[&<>"']/g, s => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[s]));
+    }
+
+    // Focus input initially
+    searchInput.focus();
+  </script>
+</body>
+</html>
